@@ -1,63 +1,318 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><title>Secure Password Manager</title>
+<html lang="en"><head><meta charset="utf-8"><title>Vault</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-:root{--bg:#f5f6f8;--card:#fff;--text:#1d2330;--muted:#667085;--accent:#2f5bea;--border:#d9dde5;--err:#c0392b;--ok:#1e8e4e}
-@media(prefers-color-scheme:dark){:root{--bg:#14171d;--card:#1e222b;--text:#e8ebf1;--muted:#9aa3b2;--accent:#6b8cff;--border:#323846;--err:#ff7b6b;--ok:#5fd18b}}
-body{font-family:system-ui,Segoe UI,sans-serif;background:var(--bg);color:var(--text);margin:0;display:flex;justify-content:center;padding:32px 16px}
-.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;width:100%;max-width:460px}
-h1{font-size:20px;margin:0 0 4px}p.sub{color:var(--muted);margin:0 0 18px;font-size:14px}
-label{display:block;font-size:13px;margin:12px 0 4px;color:var(--muted)}
-input{width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px}
-button{margin-top:14px;padding:9px 14px;border:0;border-radius:8px;background:var(--accent);color:#fff;font-size:14px;cursor:pointer}
-button.sec{background:transparent;color:var(--accent);border:1px solid var(--border)}button.danger{background:var(--err)}
-.row{display:flex;gap:8px;flex-wrap:wrap}.msg{margin-top:14px;font-size:14px;min-height:20px}.err{color:var(--err)}.ok{color:var(--ok)}
-.hidden{display:none}hr{border:0;border-top:1px solid var(--border);margin:20px 0}
-</style></head><body><div class="card">
-<h1>Secure Password Manager</h1><p class="sub" id="sub">Loading…</p>
+:root{
+  --bg:#f3f3f6;--panel:#ffffff;--ink:#1c1b22;--muted:#6b6a76;--line:#e1e0e8;--field:#ffffff;
+  --accent:#c4163f;--accent-ink:#ffffff;--accent-soft:#fbe6eb;--top:#2a0b14;--top-ink:#ffffff;
+  --ok:#23764b;--bad:#b3392b;--shadow:0 1px 2px rgba(28,27,34,.06),0 6px 18px rgba(28,27,34,.06);
+  --sans:"Segoe UI",system-ui,-apple-system,sans-serif;--serif:"Iowan Old Style","Palatino Linotype",Georgia,serif;
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#141318;--panel:#1e1d25;--ink:#ecebf1;--muted:#9a99a8;--line:#2d2c37;--field:#15141a;
+  --accent:#ff5c7c;--accent-ink:#2a0710;--accent-soft:#35171f;--top:#0d0c10;--top-ink:#ecebf1;
+  --ok:#5cc88e;--bad:#ff8a7a;--shadow:0 1px 2px rgba(0,0,0,.3),0 6px 18px rgba(0,0,0,.25)}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--sans);min-height:100vh}
+h1,h2,h3{margin:0;font-weight:600}
+.hidden{display:none!important}
+button,input{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.icon{border:0;background:transparent;color:var(--muted);width:34px;height:34px;border-radius:8px;cursor:pointer;display:grid;place-items:center;flex:none}
+.icon:hover{background:var(--accent-soft);color:var(--accent)}
+.icon svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.btn{border:1px solid var(--line);background:var(--panel);padding:8px 16px;border-radius:10px;cursor:pointer}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+.btn.primary:hover{filter:brightness(1.07)}
+.btn.warn{color:var(--bad)}
+label{display:block;font-size:13px;color:var(--muted);margin:14px 0 5px}
+.field{position:relative}
+input[type=text],input[type=password]{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--field)}
+input.pad{padding-right:116px}
+input:focus{border-color:var(--accent)}
+.inline{position:absolute;right:4px;top:50%;transform:translateY(-50%);display:flex}
+.meter{display:flex;gap:4px;margin-top:8px}.meter i{flex:1;height:4px;border-radius:2px;background:var(--line);transition:background .2s}
+.meter-note{font-size:12.5px;color:var(--muted);margin-top:5px;min-height:18px}
+.err{color:var(--bad);font-size:13.5px;margin-top:12px;min-height:20px}
 
-<div id="lock" class="hidden">
-  <label for="master">Master password</label>
-  <input id="master" type="password" autocomplete="off">
-  <button id="unlockBtn">Unlock</button>
-</div>
+/* lock screen */
+.lockwrap{min-height:100vh;display:grid;place-items:center;padding:24px;background:linear-gradient(160deg,var(--top),#6b0f27 130%)}
+.lockcard{width:100%;max-width:400px;background:var(--panel);border-radius:16px;padding:32px 28px;box-shadow:0 20px 60px rgba(0,0,0,.35);text-align:center}
+.lockcard h1{font:600 28px var(--serif);margin:14px 0 4px}.lockcard p{color:var(--muted);margin:0 0 20px}
+.lockcard .left{text-align:left}.lockcard .btn.full{width:100%;margin-top:18px;padding:10px}
+.dial{width:84px;height:84px;display:block;margin:0 auto}
+.dial .ring{transform-origin:50px 50px;transition:transform .9s cubic-bezier(.3,.7,.2,1)}
+.dial.open .ring{transform:rotate(220deg)}
+.dial .bolt{transition:transform .5s .5s ease;transform-origin:50px 50px}.dial.open .bolt{transform:translateX(-9px)}
 
-<div id="vault" class="hidden">
-  <label for="name">Domain</label><input id="name" placeholder="www.example.com" autocomplete="off">
-  <label for="value">Password (max 64 characters)</label><input id="value" type="password" maxlength="64" autocomplete="off">
-  <div class="row">
-    <button id="saveBtn">Save</button>
-    <button id="getBtn" class="sec">Look up</button>
-    <button id="delBtn" class="danger">Remove</button>
-    <button id="lockBtn" class="sec">Lock</button>
+/* app shell */
+.topbar{background:var(--top);color:var(--top-ink);display:flex;align-items:center;gap:14px;padding:10px 18px;position:sticky;top:0;z-index:5}
+.brand{display:flex;align-items:center;gap:8px;font:600 20px var(--serif);letter-spacing:.2px}
+.brand .dial{width:30px;height:30px;margin:0}
+.search{flex:1;max-width:560px;position:relative;margin:0 auto 0 12px}
+.search input{background:rgba(255,255,255,.1);border:1px solid transparent;color:var(--top-ink);padding-left:38px}
+.search input::placeholder{color:rgba(255,255,255,.6)}.search input:focus{background:rgba(255,255,255,.16);border-color:var(--accent)}
+.search svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);width:17px;height:17px;stroke:rgba(255,255,255,.7);fill:none;stroke-width:2;stroke-linecap:round}
+.chip{font-size:13px;color:rgba(255,255,255,.75);border:1px solid rgba(255,255,255,.25);padding:3px 11px;border-radius:99px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.chip.soon{color:#ff9d8f;border-color:#ff9d8f}
+.topbar .btn{background:transparent;color:var(--top-ink);border-color:rgba(255,255,255,.3);padding:6px 14px}
+.shell{display:grid;grid-template-columns:220px 1fr;min-height:calc(100vh - 56px)}
+.side{padding:18px 12px;border-right:1px solid var(--line);background:var(--panel)}
+.side .add{width:100%;margin-bottom:16px;padding:10px}
+.nav{display:flex;flex-direction:column;gap:2px}
+.nav button{display:flex;align-items:center;gap:10px;border:0;background:transparent;text-align:left;padding:9px 12px;border-radius:9px;cursor:pointer;color:var(--ink)}
+.nav button:hover{background:var(--bg)}
+.nav button.active{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.nav svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.nav .count{margin-left:auto;font-size:12.5px;color:var(--muted);font-weight:400}
+.main{padding:22px 24px 48px}
+.main h2{font-size:20px;margin-bottom:16px}
+
+/* tiles */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 12px 14px;display:flex;flex-direction:column;align-items:center;text-align:center;cursor:pointer;box-shadow:var(--shadow);transition:transform .15s,border-color .15s;position:relative;min-width:0}
+.tile:hover{transform:translateY(-2px);border-color:var(--accent)}
+.tile .star{position:absolute;top:8px;right:10px;color:var(--accent);font-size:14px}
+.logo{width:48px;height:48px;border-radius:12px;display:grid;place-items:center;color:#fff;font:600 22px var(--sans);margin-bottom:10px}
+.tile .nm{font-weight:600;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tile .us{font-size:13px;color:var(--muted);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.empty{text-align:center;color:var(--muted);padding:56px 12px}
+.empty h3{color:var(--ink);font-size:18px;margin-bottom:6px}
+
+/* generator view */
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px;box-shadow:var(--shadow);max-width:520px}
+.gen-out{display:flex;align-items:center;gap:6px;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:6px 6px 6px 12px}
+.gen-out code{flex:1;font:14.5px ui-monospace,Consolas,monospace;word-break:break-all}
+.opts{display:flex;flex-wrap:wrap;gap:16px;margin-top:14px;font-size:14px}
+.opts label{display:flex;align-items:center;gap:6px;margin:0;color:var(--ink)}
+.lenrow{display:flex;justify-content:space-between;margin-top:16px;font-size:14px}
+input[type=range]{width:100%;accent-color:var(--accent);margin-top:6px}
+
+/* dialogs */
+dialog{border:0;border-radius:16px;padding:0;background:var(--panel);color:var(--ink);width:min(440px,92vw);box-shadow:0 24px 70px rgba(0,0,0,.4)}
+dialog::backdrop{background:rgba(10,5,10,.55)}
+.dlg{padding:24px}.dlg-head{display:flex;align-items:center;gap:14px;margin-bottom:6px}
+.dlg-head .logo{margin:0}.dlg-head h3{font-size:18px;overflow:hidden;text-overflow:ellipsis}.dlg-head .grow{flex:1;min-width:0}
+.row{display:flex;align-items:center;gap:6px;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:5px 6px 5px 12px;min-height:42px}
+.row .val{flex:1;overflow-wrap:anywhere}.row .val.mono{font-family:ui-monospace,Consolas,monospace}
+.dlg-actions{display:flex;gap:8px;margin-top:22px;justify-content:flex-end}
+.dlg-actions .left{margin-right:auto}
+.star-on{color:var(--accent)}.star-on svg{fill:var(--accent)}
+
+.toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,20px);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:50}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+@media(max-width:760px){
+  .shell{grid-template-columns:1fr}
+  .side{border-right:0;border-bottom:1px solid var(--line);padding:10px 12px;display:flex;gap:10px;align-items:center;overflow-x:auto}
+  .side .add{width:auto;margin:0;white-space:nowrap}.nav{flex-direction:row}.nav button{white-space:nowrap}
+  .chip{display:none}.main{padding:16px 14px 40px}.search{margin-left:4px}.brand span{display:none}
+}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style></head><body>
+
+<svg width="0" height="0" style="position:absolute"><defs>
+  <symbol id="dialsvg" viewBox="0 0 100 100">
+    <circle cx="50" cy="50" r="46" fill="none" stroke="var(--line)" stroke-width="3"/>
+    <g class="ring"><circle cx="50" cy="50" r="38" fill="none" stroke="var(--accent)" stroke-width="5" stroke-dasharray="3 6.4" stroke-linecap="round"/><path d="M50 8 L55 20 L45 20 Z" fill="var(--accent)"/></g>
+    <circle cx="50" cy="50" r="22" fill="var(--panel)" stroke="var(--accent)" stroke-width="2.5"/>
+    <rect class="bolt" x="44" y="46" width="22" height="8" rx="4" fill="var(--accent)"/>
+  </symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 3l2.8 5.8 6.2.9-4.5 4.4 1.1 6.3L12 17.4 6.4 20.4l1.1-6.3L3 9.7l6.2-.9z"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M16 7l3 3"/></symbol>
+</defs></svg>
+
+<!-- Lock screen -->
+<main class="lockwrap" id="lockScreen"><div class="lockcard">
+  <svg class="dial" id="dialBig"><use href="#dialsvg"/></svg>
+  <h1 id="lockTitle">Vault</h1><p id="lockSub">Enter your master password to unlock.</p>
+  <div class="left">
+    <label for="master">Master password</label>
+    <div class="field"><input id="master" class="pad" type="password" autocomplete="off" style="padding-right:48px">
+      <div class="inline"><button class="icon" type="button" data-reveal="master" aria-label="Show password"><svg><use href="#i-eye"/></svg></button></div></div>
+    <div id="createExtra" class="hidden">
+      <div class="meter" id="masterMeter"><i></i><i></i><i></i><i></i></div><div class="meter-note" id="masterNote"></div>
+      <label for="master2">Confirm master password</label><input id="master2" type="password" autocomplete="off">
+    </div>
+  </div>
+  <button class="btn primary full" id="unlockBtn">Unlock vault</button>
+  <div class="err" id="lockErr" role="alert"></div>
+</div></main>
+
+<!-- App -->
+<div id="appScreen" class="hidden">
+  <header class="topbar">
+    <div class="brand"><svg class="dial open"><use href="#dialsvg"/></svg><span>Vault</span></div>
+    <div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <input id="search" type="text" placeholder="Search my vault" autocomplete="off" aria-label="Search my vault"></div>
+    <span class="chip" id="timer">Locks in 5:00</span>
+    <button class="btn" id="lockBtn">Lock</button>
+  </header>
+  <div class="shell">
+    <aside class="side">
+      <button class="btn primary add" id="addBtn">+ New</button>
+      <nav class="nav" aria-label="Sections">
+        <button data-view="all" class="active"><svg><use href="#i-grid"/></svg>All items<span class="count" id="cAll">0</span></button>
+        <button data-view="fav"><svg><use href="#i-star"/></svg>Favorites<span class="count" id="cFav">0</span></button>
+        <button data-view="gen"><svg><use href="#i-key"/></svg>Generator</button>
+      </nav>
+    </aside>
+    <main class="main">
+      <section id="itemsView"><h2 id="viewTitle">All items</h2><div class="grid" id="grid"></div><div class="empty hidden" id="empty"></div></section>
+      <section id="genView" class="hidden"><h2>Password generator</h2>
+        <div class="card">
+          <div class="gen-out"><code id="genOut"></code>
+            <button class="icon" id="genAgain" aria-label="Generate another"><svg><use href="#i-refresh"/></svg></button>
+            <button class="icon" id="genCopy" aria-label="Copy generated password"><svg><use href="#i-copy"/></svg></button></div>
+          <div class="lenrow"><span>Length</span><strong id="lenVal">20</strong></div>
+          <input type="range" id="len" min="8" max="64" value="20" aria-label="Password length">
+          <div class="opts"><label><input type="checkbox" id="oUpper" checked> A–Z</label><label><input type="checkbox" id="oNum" checked> 0–9</label><label><input type="checkbox" id="oSym" checked> Symbols</label></div>
+        </div></section>
+    </main>
   </div>
 </div>
-<div class="msg" id="msg"></div>
-</div>
+
+<!-- View dialog -->
+<dialog id="viewDlg"><div class="dlg">
+  <div class="dlg-head"><div class="logo" id="vLogo"></div><div class="grow"><h3 id="vName"></h3></div>
+    <button class="icon" id="vFav" aria-label="Toggle favorite"><svg><use href="#i-star"/></svg></button></div>
+  <label>Username</label>
+  <div class="row"><span class="val" id="vUser"></span><button class="icon" id="vCopyUser" aria-label="Copy username"><svg><use href="#i-copy"/></svg></button></div>
+  <label>Password</label>
+  <div class="row"><span class="val mono" id="vPass">••••••••••••</span>
+    <button class="icon" id="vReveal" aria-label="Show password"><svg><use href="#i-eye"/></svg></button>
+    <button class="icon" id="vCopyPass" aria-label="Copy password"><svg><use href="#i-copy"/></svg></button></div>
+  <div class="dlg-actions"><button class="btn warn left" id="vDelete">Delete</button><button class="btn" id="vClose">Close</button><button class="btn primary" id="vEdit">Edit</button></div>
+</div></dialog>
+
+<!-- Add/Edit dialog -->
+<dialog id="formDlg"><div class="dlg">
+  <h3 id="fTitle">New item</h3>
+  <label for="fName">Domain</label><input id="fName" type="text" placeholder="www.example.com" autocomplete="off" maxlength="64">
+  <label for="fUser">Username or email</label><input id="fUser" type="text" autocomplete="off" maxlength="62">
+  <label for="fPass">Password</label>
+  <div class="field"><input id="fPass" class="pad" type="password" maxlength="64" autocomplete="off">
+    <div class="inline"><button class="icon" type="button" data-reveal="fPass" aria-label="Show password"><svg><use href="#i-eye"/></svg></button>
+      <button class="icon" type="button" id="fGen" aria-label="Generate password" title="Generate"><svg><use href="#i-refresh"/></svg></button></div></div>
+  <div class="meter" id="fMeter"><i></i><i></i><i></i><i></i></div><div class="meter-note" id="fNote"></div>
+  <div class="err" id="fErr" role="alert"></div>
+  <div class="dlg-actions"><button class="btn" id="fCancel">Cancel</button><button class="btn primary" id="fSave">Save</button></div>
+</div></dialog>
+<div class="toast" id="toast" role="status"></div>
+
 <script>
-let token=null, vaultExists=false;
 const $=id=>document.getElementById(id);
-function msg(t,cls){const m=$("msg");m.textContent=t||"";m.className="msg "+(cls||"")}
+let token=null,vaultExists=false,creating=false,deadline=0,tick=null,items=[],view="all",editing=null,current=null,hideT;
+const AUTOLOCK_MS=5*60*1000;
+
 async function api(path,body){
   const r=await fetch("/api/"+path,{method:"POST",headers:{"Content-Type":"application/json","X-Session-Token":token||""},body:JSON.stringify(body||{})});
   const j=await r.json(); if(!r.ok) throw new Error(j.error||"Request failed"); return j;
 }
-function render(){
-  $("lock").classList.toggle("hidden",!!token);$("vault").classList.toggle("hidden",!token);
-  $("sub").textContent=token?"Vault unlocked":(vaultExists?"Enter your master password to unlock.":"No vault yet. Choose a master password to create one.");
-  $("unlockBtn").textContent=vaultExists?"Unlock":"Create vault";
+let toastT;function toast(t){const e=$("toast");e.textContent=t;e.classList.add("show");clearTimeout(toastT);toastT=setTimeout(()=>e.classList.remove("show"),2200)}
+async function copy(text,label){if(!text)return toast("Nothing to copy");try{await navigator.clipboard.writeText(text);toast(label+" copied")}catch(e){toast("Copy is blocked by the browser")}}
+
+/* strength meter */
+function strength(pw){if(!pw)return{score:0,note:""};let pool=0;if(/[a-z]/.test(pw))pool+=26;if(/[A-Z]/.test(pw))pool+=26;if(/\d/.test(pw))pool+=10;if(/[^A-Za-z0-9]/.test(pw))pool+=32;
+  const bits=pw.length*Math.log2(pool||1);
+  if(bits<36)return{score:1,note:"Weak: add length or more character types"};if(bits<60)return{score:2,note:"Fair: longer would be safer"};if(bits<80)return{score:3,note:"Good"};return{score:4,note:"Strong"}}
+function paintMeter(m,n,pw){const s=strength(pw),c=["","var(--bad)","#d08a1f","var(--ok)","var(--ok)"];[...$(m).children].forEach((el,i)=>el.style.background=i<s.score?c[s.score]:"");$(n).textContent=s.note}
+
+/* generator */
+function randInt(n){const lim=Math.floor(4294967296/n)*n,a=new Uint32Array(1);do{crypto.getRandomValues(a)}while(a[0]>=lim);return a[0]%n}
+function makePassword(){const sets=["abcdefghijklmnopqrstuvwxyz"];if($("oUpper").checked)sets.push("ABCDEFGHIJKLMNOPQRSTUVWXYZ");if($("oNum").checked)sets.push("0123456789");if($("oSym").checked)sets.push("!@#$%^&*()-_=+[]{};:,.?");
+  const len=+$("len").value,all=sets.join(""),out=sets.map(s=>s[randInt(s.length)]);while(out.length<len)out.push(all[randInt(all.length)]);
+  for(let i=out.length-1;i>0;i--){const j=randInt(i+1);[out[i],out[j]]=[out[j],out[i]]}return out.join("")}
+function generate(){$("genOut").textContent=makePassword()}
+
+/* tiles */
+function pretty(n){return n.replace(/^www\./,"")}
+function hue(n){let h=0;for(const c of n)h=(h*31+c.charCodeAt(0))%360;return h}
+function paintLogo(el,name){el.textContent=(pretty(name)[0]||"?").toUpperCase();el.style.background="hsl("+hue(name)+" 52% 42%)"}
+function renderItems(){
+  $("cAll").textContent=items.length;$("cFav").textContent=items.filter(i=>i.favorite).length;
+  const q=$("search").value.trim().toLowerCase();
+  const shown=items.filter(i=>(view!=="fav"||i.favorite)&&(!q||i.name.toLowerCase().includes(q)||i.username.toLowerCase().includes(q))).sort((a,b)=>pretty(a.name).localeCompare(pretty(b.name)));
+  const g=$("grid");g.innerHTML="";
+  shown.forEach(it=>{const t=document.createElement("div");t.className="tile";t.tabIndex=0;t.setAttribute("role","button");
+    const lg=document.createElement("div");lg.className="logo";paintLogo(lg,it.name);
+    const nm=document.createElement("div");nm.className="nm";nm.textContent=pretty(it.name);
+    const us=document.createElement("div");us.className="us";us.textContent=it.username||"No username";
+    t.append(lg,nm,us);if(it.favorite){const s=document.createElement("span");s.className="star";s.textContent="★";t.appendChild(s)}
+    t.onclick=()=>openView(it);t.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();openView(it)}};g.appendChild(t)});
+  const em=$("empty");em.classList.toggle("hidden",shown.length>0);
+  if(!shown.length){em.innerHTML="";const h=document.createElement("h3"),p=document.createElement("div");
+    if(q){h.textContent="No matches";p.textContent="Nothing in your vault matches that search."}
+    else if(view==="fav"){h.textContent="No favorites yet";p.textContent="Open an item and tap the star to pin it here."}
+    else{h.textContent="Your vault is empty";p.textContent="Press + New to add your first password."}em.append(h,p)}
 }
-async function init(){const r=await fetch("/api/status",{method:"POST",headers:{"X-Session-Token":""},body:"{}"});vaultExists=(await r.json()).vaultExists;render()}
-$("unlockBtn").onclick=async()=>{try{
-  const j=await api(vaultExists?"unlock":"create",{password:$("master").value});
-  token=j.token;vaultExists=true;$("master").value="";msg("");render();
-}catch(e){msg(e.message,"err")}};
-$("saveBtn").onclick=async()=>{try{await api("set",{name:$("name").value,value:$("value").value});$("value").value="";msg("Saved.","ok")}catch(e){msg(e.message,"err")}};
-$("getBtn").onclick=async()=>{try{const j=await api("get",{name:$("name").value});
-  if(j.value===null)msg("No entry for that domain.","err");else{$("value").type="text";$("value").value=j.value;msg("Found.","ok");setTimeout(()=>{$("value").type="password";$("value").value=""},10000)}
-}catch(e){msg(e.message,"err")}};
-$("delBtn").onclick=async()=>{try{const j=await api("remove",{name:$("name").value});msg(j.removed?"Removed.":"No entry for that domain.",j.removed?"ok":"err")}catch(e){msg(e.message,"err")}};
-$("lockBtn").onclick=async()=>{try{await api("lock")}catch(e){}token=null;$("name").value=$("value").value="";msg("Locked.");render()};
-$("master").addEventListener("keydown",e=>{if(e.key==="Enter")$("unlockBtn").click()});
-init();
+async function loadItems(){try{items=(await api("items")).items;renderItems()}catch(e){toast(e.message)}}
+function setView(v){view=v;document.querySelectorAll(".nav button").forEach(b=>b.classList.toggle("active",b.dataset.view===v));
+  $("itemsView").classList.toggle("hidden",v==="gen");$("genView").classList.toggle("hidden",v!=="gen");
+  $("viewTitle").textContent=v==="fav"?"Favorites":"All items";if(v==="gen")generate();else renderItems()}
+
+/* view dialog */
+function resetPass(){clearTimeout(hideT);$("vPass").textContent="••••••••••••";$("vPass").dataset.shown=""}
+function openView(it){current=it;paintLogo($("vLogo"),it.name);$("vName").textContent=pretty(it.name);$("vUser").textContent=it.username||"None";
+  $("vFav").classList.toggle("star-on",it.favorite);resetPass();$("viewDlg").showModal()}
+async function fetchPass(){const j=await api("reveal",{name:current.name});if(j.value===null)throw new Error("Entry not found");return j.value}
+$("vReveal").onclick=async()=>{if($("vPass").dataset.shown){resetPass();return}
+  try{$("vPass").textContent=await fetchPass();$("vPass").dataset.shown="1";clearTimeout(hideT);hideT=setTimeout(resetPass,15000)}catch(e){toast(e.message)}};
+$("vCopyPass").onclick=async()=>{try{copy(await fetchPass(),"Password")}catch(e){toast(e.message)}};
+$("vCopyUser").onclick=()=>copy(current.username,"Username");
+$("vClose").onclick=()=>{resetPass();$("viewDlg").close()};
+$("viewDlg").addEventListener("close",resetPass);
+$("vFav").onclick=async()=>{try{const f=!current.favorite;await api("favorite",{name:current.name,favorite:f});current.favorite=f;$("vFav").classList.toggle("star-on",f);await loadItems()}catch(e){toast(e.message)}};
+$("vDelete").onclick=async()=>{if(!confirm("Delete "+pretty(current.name)+" from your vault?"))return;
+  try{await api("remove",{name:current.name});$("viewDlg").close();toast("Deleted "+pretty(current.name));await loadItems()}catch(e){toast(e.message)}};
+$("vEdit").onclick=()=>{const it=current;$("viewDlg").close();openForm(it)};
+
+/* add / edit dialog */
+function openForm(it){editing=it||null;$("fTitle").textContent=it?"Edit "+pretty(it.name):"New item";
+  $("fName").value=it?it.name:"";$("fName").readOnly=!!it;$("fUser").value=it?it.username:"";$("fPass").value="";$("fPass").type="password";
+  $("fPass").placeholder=it?"Leave blank to keep the current password":"";paintMeter("fMeter","fNote","");$("fErr").textContent="";$("formDlg").showModal();(it?$("fUser"):$("fName")).focus()}
+$("addBtn").onclick=()=>openForm(null);
+$("fCancel").onclick=()=>$("formDlg").close();
+$("fPass").addEventListener("input",()=>paintMeter("fMeter","fNote",$("fPass").value));
+$("fGen").onclick=()=>{$("fPass").value=makePassword();$("fPass").type="text";paintMeter("fMeter","fNote",$("fPass").value)};
+$("fSave").onclick=async()=>{$("fErr").textContent="";
+  try{await api("save",{name:$("fName").value,username:$("fUser").value,password:$("fPass").value});
+    $("formDlg").close();toast("Saved "+pretty($("fName").value.trim()));await loadItems()}catch(e){$("fErr").textContent=e.message}};
+
+/* auto-lock */
+function bump(){deadline=Date.now()+AUTOLOCK_MS}
+function startTimer(){bump();clearInterval(tick);tick=setInterval(()=>{const left=deadline-Date.now();if(left<=0){doLock("Locked after 5 minutes of inactivity.");return}
+  const s=Math.ceil(left/1000);$("timer").textContent="Locks in "+Math.floor(s/60)+":"+String(s%60).padStart(2,"0");$("timer").classList.toggle("soon",s<=30)},1000)}
+["click","keydown","input"].forEach(ev=>document.addEventListener(ev,()=>{if(token)bump()}));
+
+/* screens */
+function showLock(msg){$("appScreen").classList.add("hidden");$("lockScreen").classList.remove("hidden");$("dialBig").classList.remove("open");
+  $("lockTitle").textContent=creating?"Create your vault":"Vault";
+  $("lockSub").textContent=creating?"Choose a master password. It can't be recovered if you forget it.":"Enter your master password to unlock.";
+  $("unlockBtn").textContent=creating?"Create vault":"Unlock vault";$("createExtra").classList.toggle("hidden",!creating);$("lockErr").textContent=msg||"";$("master").focus()}
+async function showApp(){$("dialBig").classList.add("open");await loadItems();setView("all");
+  setTimeout(()=>{$("lockScreen").classList.add("hidden");$("appScreen").classList.remove("hidden")},700);startTimer()}
+async function doLock(msg){clearInterval(tick);try{await api("lock")}catch(e){}
+  token=null;items=[];resetPass();["viewDlg","formDlg"].forEach(d=>{if($(d).open)$(d).close()});
+  ["search","master","master2","fPass"].forEach(i=>$(i).value="");$("grid").innerHTML="";showLock(msg)}
+
+/* events */
+document.querySelectorAll("[data-reveal]").forEach(b=>b.onclick=()=>{const i=$(b.dataset.reveal);i.type=i.type==="password"?"text":"password"});
+document.querySelectorAll(".nav button").forEach(b=>b.onclick=()=>setView(b.dataset.view));
+$("search").addEventListener("input",()=>{if(view==="gen")setView("all");else renderItems()});
+$("master").addEventListener("input",()=>creating&&paintMeter("masterMeter","masterNote",$("master").value));
+["master","master2"].forEach(i=>$(i).addEventListener("keydown",e=>{if(e.key==="Enter")$("unlockBtn").click()}));
+$("unlockBtn").onclick=async()=>{$("lockErr").textContent="";
+  try{if(creating){if($("master").value.length<8)throw new Error("Use at least 8 characters for the master password.");if($("master").value!==$("master2").value)throw new Error("The two passwords don't match.")}
+    const j=await api(creating?"create":"unlock",{password:$("master").value});token=j.token;vaultExists=true;creating=false;$("master").value=$("master2").value="";await showApp()}
+  catch(e){$("lockErr").textContent=e.message}};
+$("lockBtn").onclick=()=>doLock("Vault locked.");
+$("genAgain").onclick=generate;$("genCopy").onclick=()=>copy($("genOut").textContent,"Generated password");
+["len","oUpper","oNum","oSym"].forEach(i=>$(i).addEventListener("input",()=>{$("lenVal").textContent=$("len").value;generate()}));
+
+(async()=>{const r=await fetch("/api/status",{method:"POST",headers:{"X-Session-Token":""},body:"{}"});vaultExists=(await r.json()).vaultExists;creating=!vaultExists;showLock()})();
 </script></body></html>

@@ -7,9 +7,9 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const { Keychain } = require("./password-manager");
+const store = require("./db");
 
 const PORT = process.env.PORT || 3000;
-const VAULT_FILE = path.join(__dirname, "vault.json");
 const HASH_FILE = path.join(__dirname, "vault.hash");
 const INDEX_FILE = path.join(__dirname, "public", "index.html");
 
@@ -23,8 +23,42 @@ let sessionToken = null;  // random token handed to the frontend on unlock
 
 async function persist() {
   const [repr, hash] = await keychain.dump();
-  fs.writeFileSync(VAULT_FILE, repr);
+  store.save(repr);
   fs.writeFileSync(HASH_FILE, hash);
+}
+
+
+// ---- Item index -------------------------------------------------------------
+// The Keychain cannot list its entries (domains are stored only as HMACs), but a
+// UI needs a list. So we keep an index INSIDE the keychain: each piece is an
+// ordinary encrypted record, so it gets the same padding, swap and rollback
+// protection as passwords. Each value is at most 64 characters, as the library requires.
+//   "__count"        -> number of items
+//   "__idx:<i>"      -> domain of item i
+//   "__meta:<domain>"-> "<1|0>|<username>"   (favorite flag + username)
+const RESERVED = "__";
+const COUNT_KEY = "__count";
+const IDX = i => "__idx:" + i;
+const META = d => "__meta:" + d;
+const MAX_FIELD = 64;
+const MAX_USERNAME = 62;   // 64 minus the "1|" prefix
+
+const metaStr = (fav, user) => (fav ? "1" : "0") + "|" + user;
+function parseMeta(m) {
+  if (m === null || m.length < 2) return { favorite: false, username: "" };
+  return { favorite: m[0] === "1", username: m.slice(2) };
+}
+async function itemCount() {
+  const c = await keychain.get(COUNT_KEY);
+  return c === null ? 0 : parseInt(c, 10);
+}
+async function listItems() {
+  const n = await itemCount(), items = [];
+  for (let i = 0; i < n; i++) {
+    const name = await keychain.get(IDX(i));
+    items.push({ name, ...parseMeta(await keychain.get(META(name))) });
+  }
+  return items;
 }
 
 function send(res, status, obj) {
@@ -52,10 +86,10 @@ async function handleApi(req, res) {
   const body = req.method === "POST" ? await readBody(req) : {};
 
   if (url === "/api/status") {
-    return send(res, 200, { vaultExists: fs.existsSync(VAULT_FILE), unlocked: authorized(req) });
+    return send(res, 200, { vaultExists: store.exists(), unlocked: authorized(req) });
   }
   if (url === "/api/create") {
-    if (fs.existsSync(VAULT_FILE)) return send(res, 409, { error: "Vault already exists" });
+    if (store.exists()) return send(res, 409, { error: "Vault already exists" });
     if (!body.password) return send(res, 400, { error: "Password required" });
     keychain = await Keychain.init(body.password);
     await persist();
@@ -63,9 +97,9 @@ async function handleApi(req, res) {
     return send(res, 200, { token: sessionToken });
   }
   if (url === "/api/unlock") {
-    if (!fs.existsSync(VAULT_FILE)) return send(res, 404, { error: "No vault" });
+    if (!store.exists()) return send(res, 404, { error: "No vault" });
     try {
-      const repr = fs.readFileSync(VAULT_FILE, "utf8");
+      const repr = store.loadRepr();
       const hash = fs.existsSync(HASH_FILE) ? fs.readFileSync(HASH_FILE, "utf8").trim() : undefined;
       keychain = await Keychain.load(body.password || "", repr, hash);
       sessionToken = crypto.randomBytes(32).toString("hex");
@@ -80,23 +114,65 @@ async function handleApi(req, res) {
   if (!authorized(req)) return send(res, 401, { error: "Locked" });
 
   if (url === "/api/lock") { keychain = null; sessionToken = null; return send(res, 200, {}); }
-  if (url === "/api/get") {
-    try {
+  try {
+    if (url === "/api/items") return send(res, 200, { items: await listItems() });
+
+    if (url === "/api/reveal") {
       const value = await keychain.get(String(body.name));
       return send(res, 200, { value });
-    } catch (e) { return send(res, 422, { error: "Tampering detected: " + e.message }); }
-  }
-  if (url === "/api/set") {
-    try {
-      await keychain.set(String(body.name), String(body.value));
+    }
+
+    if (url === "/api/save") {
+      const name = String(body.name || "").trim();
+      const username = String(body.username || "");
+      const password = body.password === undefined || body.password === "" ? null : String(body.password);
+      if (!name) return send(res, 400, { error: "Enter a domain" });
+      if (name.length > MAX_FIELD) return send(res, 400, { error: "Domain must be at most " + MAX_FIELD + " characters" });
+      if (name.startsWith(RESERVED)) return send(res, 400, { error: "Domains can't start with " + RESERVED });
+      if (username.length > MAX_USERNAME) return send(res, 400, { error: "Username must be at most " + MAX_USERNAME + " characters" });
+      const existing = await keychain.get(name);
+      if (existing === null && password === null) return send(res, 400, { error: "Enter a password" });
+      const prev = parseMeta(await keychain.get(META(name)));
+      const favorite = body.favorite === undefined ? prev.favorite : !!body.favorite;
+      if (password !== null) await keychain.set(name, password);   // validates length first
+      await keychain.set(META(name), metaStr(favorite, username));
+      if (existing === null) {                                      // new item: add to the encrypted index
+        const n = await itemCount();
+        await keychain.set(IDX(n), name);
+        await keychain.set(COUNT_KEY, String(n + 1));
+      }
       await persist();
       return send(res, 200, {});
-    } catch (e) { return send(res, 400, { error: e.message }); }
-  }
-  if (url === "/api/remove") {
-    const removed = await keychain.remove(String(body.name));
-    if (removed) await persist();
-    return send(res, 200, { removed });
+    }
+
+    if (url === "/api/favorite") {
+      const name = String(body.name || "");
+      if (await keychain.get(name) === null) return send(res, 404, { error: "No such entry" });
+      const prev = parseMeta(await keychain.get(META(name)));
+      await keychain.set(META(name), metaStr(!!body.favorite, prev.username));
+      await persist();
+      return send(res, 200, {});
+    }
+
+    if (url === "/api/remove") {
+      const name = String(body.name || "");
+      const n = await itemCount();
+      let pos = -1;
+      for (let i = 0; i < n && pos < 0; i++) if (await keychain.get(IDX(i)) === name) pos = i;
+      const removed = await keychain.remove(name);
+      await keychain.remove(META(name));
+      if (pos >= 0) {                                               // keep the index dense: move last into the gap
+        const last = await keychain.get(IDX(n - 1));
+        if (pos !== n - 1) await keychain.set(IDX(pos), last);
+        await keychain.remove(IDX(n - 1));
+        await keychain.set(COUNT_KEY, String(n - 1));
+      }
+      if (removed) await persist();
+      return send(res, 200, { removed });
+    }
+  } catch (e) {
+    const tamper = /tamper|authentication|malformed/i.test(e.message);
+    return send(res, tamper ? 422 : 400, { error: tamper ? "Tampering detected: " + e.message : e.message });
   }
   send(res, 404, { error: "Not found" });
 }
